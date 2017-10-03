@@ -64,6 +64,18 @@ ddm_index = "atlas_ddm-metrics-20*"
 es = Elasticsearch(['es-atlas.cern.ch:9203'],timeout=60, use_ssl=True, verify_certs=True, ca_certs=\
 'CERN-bundle.pem', http_auth='roatlas:la2Dbd5rtn3df!sx')
 
+#mapping of site name convention in from rucio transfers to ddm_metrics
+with open('mapping-rse-site.json') as siteNameJSON:    
+    siteNameMap = json.load(siteNameJSON)
+
+#make list of site names
+siteNames = list(siteNameMap.values()) #these are sitenames as they show up in ddm-metrics and network-weather
+siteNamesRucio = list(siteNameMap.keys()) #these are sitenames as they show in in rucio-transfers
+
+#name of output file name
+outputName = "output_sept.h5"
+
+#helper function used when adding ddm-metrics information to the rucio transfers
 def returnMin(lists,target):
 
 	frontrunner = 0
@@ -150,6 +162,12 @@ for entry in scroll_transfers:
 
 	source = entry['_source']['payload']['src-rse'] #where did the transfer come from
 	destination = entry['_source']['payload']['dst-rse'] #where is the transfer going
+        #discard entries with sources or destination not consistent with site naming convention:
+        if source not in siteNamesRucio: continue
+        if destination not in siteNamesRucio: continue
+        #convert source and snakkes name according to mapping to ddm name conventions:
+        source = siteNameMap[source]
+        destination = siteNameMap[destination]
 	transfertime = entry['_source']['payload']['transferred_at'] # when was the transfer performed/attempted
 	submittime = entry['_source']['payload']['submitted_at'] #when was the transfer submitted
 	#convert to uppercase to minimise chance of mishaps when comparing to "closeness" information from JSON later.
@@ -202,7 +220,6 @@ for entry in scroll_transfers:
 
 	#add transfer dictionary to list of transfers.
 	transfers.append(transfer)	
-	#TODO: some check that all variables are present
 	
 
 #############################
@@ -229,9 +246,12 @@ for entry in scroll_metrics:
 	source = entry['_source']['src'].upper()
 	destination = entry['_source']['dst'].upper()
 	link = source + ":" + destination
-#	link = source.split("_")[0].upper()+"_"+destination.split("_")[0].upper()
 	timestamp = entry['_source']['timestamp']
 	timestamp = int(time.mktime(time.strptime(timestamp,pattern_ddm)))*1000
+
+        #discard entries with sources or destination not consistent with site naming convention:
+        if source not in siteNamesRucio: continue
+        if destination not in siteNamesRucio: continue
 
 	if "done-total-6h" in entry['_source'].keys():
 		try:
@@ -297,16 +317,14 @@ for entry in transfers:
 	found_all = True
 
 	## Add closeness info. simpler, because it is static
-#	if entry["link"] in closeness.keys():
 	try:
 		entry["closeness"] = closeness[entry["link"]]
 	except:
 		found_all = False
-#		if verbose: 		print "Failed to find closeness info for link ", entry["link"], ". Dropping event!"
-			
-	
+		if verbose: 		print "Failed to find closeness info for link ", entry["link"], ". Dropping event!"
+				
 	#check to see if variable in keys of dict.	
-	if entry["link"] in done_link_1h.keys():# and len(done_link_1h[entry["link"]]) > 0:
+	if entry["link"] in done_link_1h.keys():
 		
 		try:
 			entry["done_link_1h"] = returnMin(done_link_1h[entry["link"]],entry["transfertime"]) 
@@ -317,7 +335,7 @@ for entry in transfers:
 		if verbose: print "No entry found in done_link_1h. Dropping Event!"
 		found_all = False
 
-	if entry["link"] in done_link_6h.keys():# and len(done_link_6h[entry["link"]]) > 0:
+	if entry["link"] in done_link_6h.keys():
 
 		try:
 			entry["done_link_6h"] = returnMin(done_link_6h[entry["link"]],entry["transfertime"])
@@ -328,7 +346,7 @@ for entry in transfers:
 		if verbose: print "No entry found in done_link_6h. Dropping Event!"
 		found_all = False
 
-	if entry["link"] in queued_link.keys():# and len(queued_link[entry["link"]]) > 0:
+	if entry["link"] in queued_link.keys():
 		try:
 			entry["queued_link"] = returnMin(queued_link[entry["link"]],entry["transfertime"])
 		except:
@@ -337,7 +355,7 @@ for entry in transfers:
 	else:
 		if verbose: print "No entry found in queued_link. Dropping Event!"
 		found_all = False
-	if entry["link"] in throughput_link.keys():# and len(throughput_link[entry["link"]]) > 0:
+	if entry["link"] in throughput_link.keys():
 		try:
 			entry["throughput_link"] = returnMin(throughput_link[entry["link"]],entry["transfertime"])
 		except:
@@ -356,9 +374,6 @@ for entry in transfers:
 print "final transfers gathered"
 print "number of transfers in final list: ",successes
 print "persentage of transfers found: ", float(successes)/(failures + successes)
-
-
-#print final_transfers
 
 
 ####################
@@ -380,10 +395,25 @@ numpy_retried = np.array([x['retried'] for x in final_transfers]).reshape((len(f
 
 numpy_successful = np.array([x['successful'] for x in final_transfers]).reshape((len(final_transfers), 1)).astype(float)
 
-numpy_total = np.concatenate((numpy_closeness,numpy_throughput_link,numpy_done_link_6h,numpy_done_link_1h,numpy_queued_link,numpy_size,numpy_protocol,numpy_retried,numpy_successful), axis=1)
+numpy_total = np.concatenate((numpy_closeness,
+			      numpy_throughput_link,
+			      numpy_done_link_6h,
+			      numpy_done_link_1h,
+			      numpy_queued_link,
+			      numpy_size,
+			      numpy_protocol,
+			      numpy_retried,
+			      numpy_successful), axis=1)
 
 #list to keep track of the order of variables. Remember to update this when "numpy_total" changes
-variables = ["closeness","throughput","done_6h","done_1h","queued","size","protocol","retried"]
+variables = ["closeness",
+	     "throughput",
+	     "done_6h",
+	     "done_1h",
+	     "queued",
+	     "size",
+	     "protocol",
+	     "retried"]
 
 #######################
 # Write Array to File #
@@ -392,7 +422,7 @@ variables = ["closeness","throughput","done_6h","done_1h","queued","size","proto
 print "Writing Array to File"
 
 #storing file
-f = h5py.File("output_sept.h5", "w")
+f = h5py.File(outputName, "w")
 f.create_dataset("transfer_data", data=numpy_total)
 f.close()
 
