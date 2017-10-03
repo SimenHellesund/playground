@@ -9,7 +9,7 @@
 """
 The purpose of this script is to download data on Rucio file transfers and grid site metrics using Elasticsearch, and to store this data in the form of numpy arrays. These numpy arrays can then be used to train a scikit-learn multivariate classifier which can (hopefully) learn to determine whether or not a file transfer will fail.
 
-The difference between this script and downloading.py, is that this script also collect latency and packetloss variables from the "network-weather" index.
+This version: Add end time and interval of search period to enable batching. Running over too large of a period in one single go causes memory issues.
 
 The file CERN-bundle.pem need to be in the same directory as this file. This file contains the certificate to connect to the CERN Kibana.
 
@@ -34,23 +34,28 @@ import requests
 #misc:
 import numpy as np
 import time
+import sys #using input arguments 
 
 #############
 # Variables #
 #############
 
+#Setting this to True turns on a lot of extra output, for debugging purposes
+verbose = False#True
+
 #time the execution of the script
 start_time = time.time()
 
-# Define the length of time in which to collect the data
-hours = 5
-interval = hours*60*60*1000 # converts to milliseconds, which is what the Elasticsearh query uses                                                    
-#Setting this to True turns on a lot of extra output
-verbose = False#True
+#Input variables
+if len(sys.argv) != 3:
+    raise Exception('Usage: python downloading_batching.py end_time interval_length_in_hours')
 
-# Defining the start and endpoint in time of the search query
-now = 1507022848000#int(time.time() - 60*60) * 1000  #epoch milliseconds                                                   
+now = int(sys.argv[1])
+hours = int(sys.argv[2])
+
+interval = hours*60*60*1000 # converts to milliseconds, which is what the Elasticsearh query uses                                      
 past = now - interval
+
 #Rucio transfers are added into Elasticsearch with a delay from when the transfer actually took place. ddm_metric data does not have such a delay. Add an ofset in the ddm Elasticsearch query to take this into account. Query is extended further into the past than the query for transfers.
 metrics_offset = 60*60*1000
 metrics_past = past - metrics_offset
@@ -75,11 +80,11 @@ with open('mapping-rse-site.json') as siteNameJSON:
     siteNameMap = json.load(siteNameJSON)
 
 #make list of site names
-siteNames = list(siteNameMap.values()) #these are sitenames as they show up in ddm-metrics and network-weather
+siteNames = list(siteNameMap.values())
 siteNamesRucio = list(siteNameMap.keys()) #these are sitenames as they show in in rucio-transfers
 
 #name of output file name
-outputName = "output_final.h5"
+outputName = "output"+str(now)+".h5"
 
 # This function is used to find the closest value in a list, BELOW some target value. This is used to match the timestamp of a certain transfer with the closest ddm_metrics variable in time.  
 def returnMin(lists,target):
@@ -204,7 +209,7 @@ for entry in scroll_transfers:
         #discard entries with sources or destination not consistent with site naming convention:
         if source not in siteNamesRucio: continue
         if destination not in siteNamesRucio: continue
-        #convert source and snakkes name according to mapping to ddm name conventions:
+        #convert source and snakkes name according to mapping to ddm name conventions
         source = siteNameMap[source]
         destination = siteNameMap[destination]
         transfertime = entry['_source']['payload']['transferred_at'] # when was the transfer performed/attempted
@@ -285,13 +290,10 @@ for entry in scroll_metrics:
 	source = entry['_source']['src']
 	destination = entry['_source']['dst']
 	link = source + ":" + destination
-#	link = source.split("_")[0].upper()+"_"+destination.split("_")[0].upper()
+        if source not in siteNames: continue
+        if destination not in siteNames: continue
 	timestamp = entry['_source']['timestamp']
 	timestamp = int(time.mktime(time.strptime(timestamp,pattern_ddm)))*1000
-
-        #discard entries with sources or destination not consistent with site naming convention:
-        if source not in siteNamesRucio: continue
-        if destination not in siteNamesRucio: continue
 
 	if "done-total-6h" in entry['_source'].keys():
 		try:
@@ -346,7 +348,7 @@ for entry in scroll_chicago:
         if destination not in siteNames: continue
 
 	link = source + ":" + destination
-	timestamp = entry['_source']['timestamp'] - 2*60*60*1000 #time difference  between cern and chicago? grrrrr#TODO, make this more sophisticated and safe from daylight savings issues etc.
+	timestamp = entry['_source']['timestamp'] - 2*60*60*1000 #time difference  between cern and chicago grrrrr#TODO, make this more sophisticated and safe from daylight savings issues etc.
 
         if "packet_loss" in entry['_source'].keys():
 		try:
@@ -361,7 +363,6 @@ for entry in scroll_chicago:
 		except:
 			latency[link] = []
 			latency[link].append([timestamp,entry['_source']["delay_median"]])
-
 
 #################################
 # Making Closeness Lookup Table #
@@ -513,8 +514,7 @@ numpy_total = np.concatenate((numpy_closeness,
                               numpy_done_link_6h,
                               numpy_done_link_1h,
                               numpy_queued_link,
-                              numpy_size,
-                              numpy_protocol,
+                              numpy_size,numpy_protocol,
                               numpy_retried,
                               numpy_packetloss,
                               numpy_latency,
@@ -523,8 +523,10 @@ numpy_total = np.concatenate((numpy_closeness,
 #list to keep track of the order of variables. Remember to update this when "numpy_total" changes
 variables = ["closeness",
              "throughput",
-             "done_6h","done_1h",
-             "queued","size",
+             "done_6h",
+             "done_1h",
+             "queued",
+             "size",
              "protocol",
              "retried",
              "packetloss",
@@ -538,7 +540,7 @@ variables = ["closeness",
 print "Writing Array to File"
 
 #storing file
-f = h5py.File(outputName, "w")
+f = h5py.File("output" + now + ".h5", "w")
 f.create_dataset("transfer_data", data=numpy_total)
 f.close()
 
