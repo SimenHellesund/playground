@@ -45,19 +45,16 @@ successes = []
 failures = []
 
 #failures
-for array in data:
+for num,array in enumerate(data):
+    if not num%10000: print "processing row " + str(num) + "/" + str(len(data))
+
     if array[-1] == 0:
         failures.append(array)
     elif array[-1] == 1:
         successes.append(array)
 
-new_successes = []
 
-#successes. Fill only as many as there are failures. Want balanced samples to train classifier.
-counter = 0
-while counter<=len(failures):
-    new_successes.append(successes[counter])
-    counter+=1
+
 
 #################################################
 # Convert back into numpy array and write files #
@@ -65,7 +62,10 @@ while counter<=len(failures):
 
 print "Making new arrays"
 
-successes = np.array(new_successes)
+print "len succ: %s" %len(successes)
+print "len fail: %s" %len(failures)
+
+successes = np.array(successes)
 failures = np.array(failures)
 
 print "writing output files"

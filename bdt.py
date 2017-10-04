@@ -61,20 +61,21 @@ tree = inputFile.keys()[0]
 data = np.array(inputFile[tree])
 
 #read successes and failures only input files
-inputSucc = h5py.File("QualInput/allVars_successes.h5","r")
-inputFail = h5py.File("QualInput/allVars_failures.h5","r")
+#inputSucc = h5py.File("QualInput/big_sept_successes.h5","r")
+#inputFail = h5py.File("QualInput/big_sept_failures.h5","r")
+inputSucc = h5py.File("QualInput/big_sept_noDups_successes.h5","r") 
+inputFail = h5py.File("QualInput/big_sept_noDups_failures.h5","r")
 dataSucc = np.array(inputSucc[tree])
 dataFail = np.array(inputFail[tree])
 
-#pick only nEvents for training and testing. Could be useful if input very large and you only want to use a subset of the data to save time.
-
 nEvents = min([len(dataSucc),len(dataFail)])#10000
-dataSucc = shuffle(dataSucc,n_samples=nEvents)
-dataFail = shuffle(dataFail,n_samples=nEvents)
+dataSucc = shuffle(dataSucc,n_samples=100000)
+dataFail = shuffle(dataFail,n_samples=100000)
+
 
 # Split data into traing and testing sample of equal size. 
 trainingSucc,testingSucc = np.array_split(dataSucc,2,axis=0)
-trainingFail,testingFail =np.array_split(dataFail,2,axis=0)
+trainingFail,testingFail = np.array_split(dataFail,2,axis=0)
 
 #add success and failure samples together.
 trainingData = np.concatenate((trainingSucc,trainingFail),axis=0)
@@ -102,7 +103,6 @@ bdt = AdaBoostClassifier(DecisionTreeClassifier(max_depth=1),n_estimators=200)
 
 print "Training BDT" 
 bdt.fit(trainingVars, np.ravel(trainingTarget))
-
 
 #######################################################################################
 # Calculate Rate of Correct and Incorrect Classification in Training and Testing Data #
@@ -253,7 +253,11 @@ for column,variable in enumerate(variables):
 #histograms
 for column,variable in enumerate(variables):
 
-    bins = np.linspace(0, np.amax(testingVars[:,column],axis=0), 25)
+
+    if variable == "packetloss": #packetloss hardcoded due to some weird behavious (a handfull of very high values maybe?)
+        bins = np.linspace(0, 0.015, 25)
+    else:
+        bins = np.linspace(0, np.amax(testingVars[:,column],axis=0), 25)
  
     #do successes and failures in different colours
     figD, axD = plt.subplots(1,1)
