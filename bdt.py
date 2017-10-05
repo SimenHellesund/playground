@@ -61,8 +61,8 @@ tree = inputFile.keys()[0]
 data = np.array(inputFile[tree])
 
 #read successes and failures only input files
-inputNameSucc = "big_sept_noDups_successes.h5"
-inputNameFail = "big_sept_noDups_failures.h5"
+inputNameSucc = "sept_all_noDups_successes.h5"
+inputNameFail = "sept_all_noDups_failures.h5"
 #inputSucc = h5py.File("QualInput/big_sept_successes.h5","r")
 #inputFail = h5py.File("QualInput/big_sept_failures.h5","r")
 inputSucc = h5py.File("QualInput/" + inputNameSucc,"r") 
@@ -70,16 +70,26 @@ inputFail = h5py.File("QualInput/" + inputNameFail,"r")
 dataSucc = np.array(inputSucc[tree])
 dataFail = np.array(inputFail[tree])
 
-balancedTraining = True
+balancedTraining = False
 balancedTesting = True
 
-nEvents = min([len(dataSucc),len(dataFail)])#10000
-dataSucc = shuffle(dataSucc,n_samples=nEvents)
-dataFail = shuffle(dataFail,n_samples=nEvents)
+#nEvents = #min([len(dataSucc),len(dataFail)])#10000
+dataFail = shuffle(dataFail,n_samples=len(dataFail))
+
+if balancedTraining:
+    dataSucc  = shuffle(dataSucc,n_samples=len(dataFail))
+else:
+    dataSucc = shuffle(dataSucc,n_samples=len(dataSucc))
+
 
 # Split data into traing and testing sample of equal size. 
-trainingSucc,testingSucc = np.array_split(dataSucc,2,axis=0)
-trainingFail,testingFail = np.array_split(dataFail,2,axis=0)
+trainingSucc,testingSucc = np.split(dataSucc,[dataSucc.shape[0]-len(dataFail)/2])#np.array_split(dataSucc,2,axis=0)
+trainingFail,testingFail = np.split(dataFail,[dataFail.shape[0]-len(dataFail)/2])#np.array_split(dataFail,2,axis=0)
+
+print len(trainingSucc)
+print len(trainingFail)
+print len(testingSucc)
+print len(testingFail)
 
 #add success and failure samples together.
 trainingData = np.concatenate((trainingSucc,trainingFail),axis=0)
@@ -95,7 +105,7 @@ testingVars, testingTarget = np.split(testingData,[testingData.shape[1]-1],axis=
 
 # This is where the magic happens!
 
-trees = 400
+trees = 500
 depth = 3 #1 = stumps
 
 print "Declaring Classifier"
