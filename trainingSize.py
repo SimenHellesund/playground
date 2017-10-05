@@ -51,12 +51,16 @@ np.set_printoptions(threshold=np.nan)
 print "Reading Input Files"
 
 #read successes and failures only input files
-inputSucc = h5py.File("QualInput/newSept_successes.h5","r")
-inputFail = h5py.File("QualInput/newSept_failures.h5","r")
+inputNameSucc = "sept_all_noDups_successes.h5"
+inputNameFail = "sept_all_noDups_failures.h5"
+inputSucc = h5py.File("QualInput/" + inputNameSucc,"r")
+inputFail = h5py.File("QualInput/" + inputNameFail,"r")
 tree = inputSucc.keys()[0]
 dataSucc = np.array(inputSucc[tree])
 dataFail = np.array(inputFail[tree])
 
+balancedTraining = True
+balancedTesting = True
 
 ####################
 # Define Variables #
@@ -67,30 +71,31 @@ verbose = True
 sizes = []
 AUC = []
 
-trainingSize = 5000
-testingSize = 5000
-updateSize = 1000
+trees = 500
+depth = 3
 
 ########################################
 # Loop Over Different Size of Training #
 ########################################
 
-while trainingSize <= len(dataSucc) - testingSize:
+loopSizes = [10,20,30,40,50,60,70,80,90,100,200,300,400,500,600,700,800,900,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,20000,30000,40000,50000,60000,70000,80000,90000,100000,200000,300000]
 
-    if verbose: print "Now training on %i variables" %trainingSize
-    
+testingSize = 5000
+
+#while trainingSize <= len(dataFail) - testingSize:
+for trainingSize in loopSizes:
+
+    if verbose: print "Now training on %i transfers" %trainingSize
+
     #Shape data
-    dataSuccTemp = resample(dataSucc,n_samples=(trainingSize+testingSize))
-    dataFailTemp = resample(dataFail,n_samples=(trainingSize+testingSize))
+    dataSuccTemp = resample(dataSucc,n_samples=int(trainingSize/2)+int(testingSize/2))
+    dataFailTemp = resample(dataFail,n_samples=int(trainingSize/2)+int(testingSize/2))
 
     # Split data into traing and testing sample. 
-    trainingSuccTemp = dataSuccTemp[:trainingSize]
-    testingSuccTemp = dataSuccTemp[-testingSize:]
-    trainingFailTemp = dataFailTemp[:trainingSize]
-    testingFailTemp = dataFailTemp[-testingSize:]
-
-    print len(trainingSuccTemp)
-    print len(testingSuccTemp)
+    trainingSuccTemp = dataSuccTemp[:int(trainingSize/2)]
+    testingSuccTemp = dataSuccTemp[-int(testingSize/2):]
+    trainingFailTemp = dataFailTemp[:int(trainingSize/2)]
+    testingFailTemp = dataFailTemp[-int(testingSize/2):]
 
     #add success and failure samples together.
     trainingDataTemp = np.concatenate((trainingSuccTemp,trainingFailTemp),axis=0)
@@ -106,7 +111,7 @@ while trainingSize <= len(dataSucc) - testingSize:
     testingVarsTemp = min_max_scaler.transform(testingVarsTemp)
 
     #build and train bdt
-    bdt = AdaBoostClassifier(DecisionTreeClassifier(max_depth=1),n_estimators=200)
+    bdt = AdaBoostClassifier(DecisionTreeClassifier(max_depth=depth),n_estimators=trees)
     bdt.fit(trainingVarsTemp, np.ravel(trainingTargetTemp))
 
     #bdt score for testing sample
@@ -120,18 +125,32 @@ while trainingSize <= len(dataSucc) - testingSize:
     sizes.append(trainingSize)
     AUC.append(auc)
 
-    #update Size
-    trainingSize += updateSize
+    #update Size (if while loop)
+#    trainingSize += updateSize
 
 
+######################################
+# Information Sheet for the Plot PDF #
+######################################
+
+textstr = "Size of testing sample: %s \nInput file successes: %s \nInput File failures: %s \nBalanced sam\
+ples training: %s \nBalanced samples testing: %s \nBDT depth: %s \nBDT n_estimators: %s" %(testingSize,inputNameSucc,inputNameFail,balancedTraining,balancedTesting,depth,trees)
+fig, ax1 = plt.subplots(1,1)
+ax1.text(0.05, 0.95, textstr, transform=ax1.transAxes, fontsize=14, verticalalignment='top')
+ax1.set_title("Information")
+ax1.axis('off')
+pdf_pages.savefig(fig)
 
 #plotting
 figA, ax = plt.subplots(1, 1)
-ax.plot(sizes, AUC)
+ax.semilogx(sizes, AUC)
 ax.set_ylabel("AUC")
+ax.set_ylim([0,1])
 ax.set_xlabel("Training Sample Size")
 pdf_pages.savefig(figA)
-plt.show()
+
+#show plots on screen
+#plt.show()
 
 #Save pdf
 pdf_pages.close()

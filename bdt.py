@@ -1,7 +1,6 @@
 ###############
 # Description #
 ###############
-
 # Author: Simen Hellesund (based on work done by James Catmore as well as scikit-learn documentaion)
 # Contact: shellesu@cern.ch / simehe@uio.no
 # Usage: pyton BDT.py 
@@ -37,6 +36,7 @@ from sklearn import metrics
 from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import zero_one_loss
 
 # Write plots to pdf
 from matplotlib.backends.backend_pdf import PdfPages
@@ -61,17 +61,21 @@ tree = inputFile.keys()[0]
 data = np.array(inputFile[tree])
 
 #read successes and failures only input files
+inputNameSucc = "big_sept_noDups_successes.h5"
+inputNameFail = "big_sept_noDups_failures.h5"
 #inputSucc = h5py.File("QualInput/big_sept_successes.h5","r")
 #inputFail = h5py.File("QualInput/big_sept_failures.h5","r")
-inputSucc = h5py.File("QualInput/big_sept_noDups_successes.h5","r") 
-inputFail = h5py.File("QualInput/big_sept_noDups_failures.h5","r")
+inputSucc = h5py.File("QualInput/" + inputNameSucc,"r") 
+inputFail = h5py.File("QualInput/" + inputNameFail,"r")
 dataSucc = np.array(inputSucc[tree])
 dataFail = np.array(inputFail[tree])
 
-nEvents = min([len(dataSucc),len(dataFail)])#10000
-dataSucc = shuffle(dataSucc,n_samples=100000)
-dataFail = shuffle(dataFail,n_samples=100000)
+balancedTraining = True
+balancedTesting = True
 
+nEvents = min([len(dataSucc),len(dataFail)])#10000
+dataSucc = shuffle(dataSucc,n_samples=nEvents)
+dataFail = shuffle(dataFail,n_samples=nEvents)
 
 # Split data into traing and testing sample of equal size. 
 trainingSucc,testingSucc = np.array_split(dataSucc,2,axis=0)
@@ -85,21 +89,17 @@ testingData = np.concatenate((testingSucc,testingFail),axis=0)
 trainingVars, trainingTarget = np.split(trainingData,[trainingData.shape[1]-1],axis=1)
 testingVars, testingTarget = np.split(testingData,[testingData.shape[1]-1],axis=1)
 
-
-## scale variables. Map all variables to values between 0 and 1. This is to prevent large numbers from dominating in the testing. 
-print "Scaling Variables"
-#min_max_scaler = preprocessing.MinMaxScaler()
-#trainingVars = min_max_scaler.fit_transform(trainingVars)
-#testingVars = min_max_scaler.transform(testingVars)
-
 ##############################################
 # Create and fit an AdaBoosted decision tree #
 ##############################################
 
 # This is where the magic happens!
 
+trees = 400
+depth = 3 #1 = stumps
+
 print "Declaring Classifier"
-bdt = AdaBoostClassifier(DecisionTreeClassifier(max_depth=1),n_estimators=200)
+bdt = AdaBoostClassifier(DecisionTreeClassifier(max_depth=depth),n_estimators=trees)
 
 print "Training BDT" 
 bdt.fit(trainingVars, np.ravel(trainingTarget))
@@ -165,6 +165,19 @@ print "  Success identified as failure (%)    : ",100*float(test_SB)/(test_SS + 
 print "  Failure identified as success (%)    : ",100*float(test_BS)/(test_BS + test_BB)
 print "  Failure identified as failure (%)    : ",100*float(test_BB)/(test_BS + test_BB)
 
+######################################
+# Information Sheet for the Plot PDF #
+######################################
+
+textstr = "Size of training sample: %s \nSize of testing sample: %s \nInput file successes: %s \nInput File failures: %s \nBalanced sam\
+ples training: %s \nBalanced samples testing: %s \nBDT depth: %s \nBDT n_estimators: %s" %(len(trainingData),len(testingData),inputNameSucc,inputNameFail,balancedTraining,balancedTesting,depth,trees)
+fig, ax = plt.subplots(1,1)
+ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top')
+ax.set_title("Information")
+ax.axis('off')
+pdf_pages.savefig(fig)
+
+
 ##################################################
 # Plot Classifier Score For Training and Testing #
 ##################################################
@@ -225,9 +238,6 @@ pdf_pages.savefig(figC)
 ################################################
 # Plot Variables vs. Scores for Testing Sample #
 ################################################
-
-#"undo" feature scaling for plotting
-#testingVars = min_max_scaler.inverse_transform(testingVars)
 
 # Closer Look at Misidentified Transfers #
 corrSucc = testingVars[(testingTarget==1.0).reshape(len(testingTarget),) & (output_test>=0).reshape(len(output_test),)]#correctly identified successes (score > 0)
@@ -307,8 +317,32 @@ for column,variable in enumerate(variables):
     axE.set_title("%s Distribution for mis- and Correctly Identified Successful Transfers" %variable.capitalize())
     pdf_pages.savefig(figE)
 
+##########
+# Errors #
+##########
 
 
+bdt_err_train = np.zeros((trees,))
+for i, y_pred in enumerate(bdt.staged_predict(trainingVars)):
+    bdt_err_train[i] = zero_one_loss(y_pred, trainingTarget)
+
+bdt_err_test = np.zeros((trees,))
+for i, y_pred in enumerate(bdt.staged_predict(testingVars)):
+    bdt_err_test[i] = zero_one_loss(y_pred, testingTarget)
+
+figF, axF = plt.subplots(1,1)
+axF.plot(np.arange(trees) + 1, bdt_err_train,
+        label='Training Error',
+        color='black')
+axF.plot(np.arange(trees) + 1, bdt_err_test,
+        label='Testing Error',
+        color='blue')
+
+axF.set_ylabel("Error")
+axF.set_xlabel("Number of Trees (n_estimators)")
+axF.legend(loc='upper right')
+axF.set_title("Training and Testing Error, max_depth: %s" %depth)
+pdf_pages.savefig(figF)
 
 
 #Draw Plots
