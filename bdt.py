@@ -61,8 +61,8 @@ tree = inputFile.keys()[0]
 data = np.array(inputFile[tree])
 
 #read successes and failures only input files
-inputNameSucc = "sept_all_noDups_successes.h5"
-inputNameFail = "sept_all_noDups_failures.h5"
+inputNameSucc = "sept_all_noDups_noRetried_successes.h5"
+inputNameFail = "sept_all_noDups_noRetried_failures.h5"
 #inputSucc = h5py.File("QualInput/big_sept_successes.h5","r")
 #inputFail = h5py.File("QualInput/big_sept_failures.h5","r")
 inputSucc = h5py.File("QualInput/" + inputNameSucc,"r") 
@@ -70,7 +70,7 @@ inputFail = h5py.File("QualInput/" + inputNameFail,"r")
 dataSucc = np.array(inputSucc[tree])
 dataFail = np.array(inputFail[tree])
 
-balancedTraining = False
+balancedTraining = True
 balancedTesting = True
 
 #nEvents = #min([len(dataSucc),len(dataFail)])#10000
@@ -267,6 +267,9 @@ for column,variable in enumerate(variables):
     axD.legend(loc='upper right')
     axD.set_ylabel("Classifier Score")
     axD.set_xlabel(variable)
+    if variable == "protocol":
+        axD.set_xticks([0,1,2,3])
+        axD.set_xticklabels(protocol_labels)
     axD.set_title("Classifier Score vs %s (Testing Sample)" %variable)
     pdf_pages.savefig(figD)
 
@@ -297,10 +300,10 @@ for column,variable in enumerate(variables):
 
     #make histograms comparing mis- and correctly identified successful transfers
     figE, axE = plt.subplots(1,1)
-    axE.hist(misFail[:,column],bins,alpha=0.4,facecolor="orange",label='Misidentified',histtype='stepfilled',normed=True)
+    axE.hist(misFail[:,column],bins,alpha=0.4,facecolor="yellow",label='Misidentified',histtype='stepfilled',normed=True)
     axE.hist(corrFail[:,column],bins, alpha=0.4,facecolor="red",label='Correcly Identified',histtype='stepfilled',normed=True)
     axE.legend(loc="upper right")
-    axE.set_ylabel("Arbitrary (norm.)")
+    axE.set_ylabel("Transfers (norm.)")
     axE.set_xlabel(variable)
     if variable == "protocol":
         axD.set_xticks([0,1,2,3])
@@ -316,16 +319,26 @@ for column,variable in enumerate(variables):
     axE.hist(misSucc[:,column],bins,alpha=0.4,facecolor="blue",label='Misidentified',histtype='stepfilled',normed=True)
     axE.hist(corrSucc[:,column],bins, alpha=0.4,facecolor="green",label='Correcly Identified',histtype='stepfilled',normed=True)
     axE.legend(loc="upper right")
-    axE.set_ylabel("Arbitrary (norm.)")
+    axE.set_ylabel("Transfers (norm.)")
     axE.set_xlabel(variable)
     if variable == "protocol":
         axD.set_xticks([0,1,2,3])
         axD.set_xticklabels(protocol_labels)
-    if variable == "retried":
-        axD.set_xticks([0,1])
-        axD.set_xticklabels(retried_labels)    
     axE.set_title("%s Distribution for mis- and Correctly Identified Successful Transfers" %variable.capitalize())
     pdf_pages.savefig(figE)
+
+    #misidentified transfers only
+    figF,axF = plt.subplots(1,1)
+    axF.hist(misSucc[:,column],bins,alpha=0.4,facecolor="blue",label='Mislabelled Successes',histtype='stepfilled',normed=True)
+    axF.hist(misFail[:,column],bins,alpha=0.4,facecolor="orange",label='Mislabelled Failures',histtype='stepfilled',normed=True)
+    axF.legend(loc="upper right")
+    axF.set_ylabel("Transfers (norm.)")
+    axF.set_xlabel(variable)
+    if variable == "protocol":
+        axD.set_xticks([0,1,2,3])
+        axD.set_xticklabels(protocol_labels)
+    axF.set_title("%s Disctribution for Mislabelled Transfers" %variable.capitalize())
+    pdf_pages.savefig(figF)
 
 ##########
 # Errors #
