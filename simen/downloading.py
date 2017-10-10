@@ -62,7 +62,7 @@ transfer_index = "atlas_rucio-events-*"
 ddm_index = "atlas_ddm-metrics-20*"
 
 es = Elasticsearch(['es-atlas.cern.ch:9203'],timeout=60, use_ssl=True, verify_certs=True, ca_certs=\
-'CERN-bundle.pem', http_auth='roatlas:la2Dbd5rtn3df!sx')
+'CERN-bundle.pem', http_auth='PASSWORD')
 
 #mapping of site name convention in from rucio transfers to ddm_metrics
 with open('mapping-rse-site.json') as siteNameJSON:    

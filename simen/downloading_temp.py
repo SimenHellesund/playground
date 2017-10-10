@@ -66,7 +66,7 @@ chicago_index = "network_weather-*"
 
 #url to the specific ES instances. 
 es = Elasticsearch(['es-atlas.cern.ch:9203'],timeout=60, use_ssl=True, verify_certs=True, ca_certs=\
-'CERN-bundle.pem', http_auth='roatlas:la2Dbd5rtn3df!sx') #CERN instance
+'CERN-bundle.pem', http_auth='INSERT_PASSWORD_HERE') #CERN instance
 es_chicago = Elasticsearch(['atlas-kibana.mwt2.org:9200'],timeout=60) # Chicago instance
 
 
